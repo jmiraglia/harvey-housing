@@ -1,21 +1,23 @@
 'use strict';
 var noodle = require('noodlejs'),
+    json2csv = require('json2csv'),
     fs = require('fs'),
-    json2csv = require('json2csv');
+    XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 
 module.exports = {
     addScraper: addScraper
 }
 
 function addScraper(options){
-    var completed_pages = [],
-        pages_to_crawl = [],
-        pages_crawling = [],
-        crawler = null,
-        PAGE_LOAD_INTERVAL = 2000,
-        STORAGE_FILE = "airbnb.json";
+    var scraped = [],       // Scraped pages will go here
+        queue = [],                 // Queue of pages
+        scraping = [],              // Currently being scraped
+        crawler = null,             // Interval loop to process the queue
+        PAGE_LOAD_INTERVAL = 1000,  // How often to process next queue item
+        STORAGE_FILE = "airbnb.csv";// File name to store results in
 
     function init(){
+        // Start out by writing to the destination file to start with an empty file
         fs.writeFile(STORAGE_FILE, '', function(err){
             if(err){
                 return console.log(err);
@@ -24,9 +26,10 @@ function addScraper(options){
             }
         });
 
+        // Add the root URL to load all listings from
         addStartingPoint(options.start_url);
 
-        // Get the maximum page of results
+        // Get the number of pages of results
         noodle.query({
             "url": options.start_url,
             "type": "html",
@@ -38,16 +41,18 @@ function addScraper(options){
                 results = results.results[0].results;
 
                 // Load all paginated listings
-                for(var p=2;p<parseInt(results[results.length-2]);p++){
+                for(var p=2;p<=parseInt(results[results.length-2]);p++){
                     addStartingPoint(options.start_url + '&page=' + p);
                 }
 
                 console.log('There are ' + results[results.length-2] + ' paginated pages');
             });
 
-        crawler = setInterval(crawlPage, PAGE_LOAD_INTERVAL);
+        // Start the crawler processing the queue
+        crawler = setInterval(processQueue, PAGE_LOAD_INTERVAL);
     }
 
+    // Scrape a page full of listings
     function addStartingPoint(url){
         console.log('Adding new starting point: ' + url);
         noodle.query({
@@ -58,94 +63,118 @@ function addScraper(options){
             "cache": "false"
         })
             .then(function (results) {
-                crawlPages(results.results[0].results);
+                // Process the results of listings for individual page load
+                processListings(results.results[0].results);
             });
     }
 
-    function crawlPages(pages){
-        // Add new pages to the queue to be crawled`
-        for(var i=0;i<pages.length;i++){
-            var duplicate = false;
+    // Helper function to return only the pagename from a URL
+    function getPageName(url){
+        return url.replace(/^.*\//, "").replace(/\?.*$/, "");
 
-            // Make sure we aren't already queued to crawl this page
-            for(var c=0;c<pages_to_crawl.length;c++){
-                if(pages_to_crawl[c] == pages[i]){
-                    duplicate = true;
-                }
-            }
+    }
 
-            for(var c=0;c<pages_crawling.length;c++){
-                if(pages_crawling[c] == pages[i]){
-                    duplicate = true;
-                }
-            }
-
-            if(!duplicate){
-                pages_to_crawl.push(pages[i]);
-            }
+    // Loop through all provided listings and load the listingInfo for each
+    function processListings(pages){
+        for(var p=0;p<pages.length;p++){
+            getListingInfo(getPageName(pages[p]));
         }
     }
 
-    function crawlPage(){
-        if(pages_to_crawl.length > 0){
-            var page = pages_to_crawl[pages_to_crawl.length - 1];
-            pages_crawling.push(page);
-            pages_to_crawl.pop();
+    // Generate task to be pushed to queue
+    function getListingInfo(location_id){
+        var url = options.api_url + '/v2/listings/' + location_id + '?client_id=3092nxybyb0otqw18e8nh5nty&locale=en-US&currency=USD&_format=v1_legacy_for_p3&number_of_guests=1';
 
-            console.log("Pages crawling: " + pages_crawling.length + " | pages to crawl: " + pages_to_crawl.length);
+        addToQueue({
+            'method': 'GET',
+            'url': url,
+            'callback': addListing
+        });
+    }
 
-            noodle.query({
-                "url": options.root_domain + page,
-                "type": "html",
-                "selector": "script",
-                "extract": "html",
-                "cache": "false"
-            })
-                .then(function (results) {
-                    var target = null;
-                    results = results.results[0].results;
+    // Add a task to the queue
+    function addToQueue(prefs){
+        var unique = true;
 
-                    if (options.type === 'airbnb'){
-                        // Loop through the scripts to find the boostrap data containing the listing information
-                        for(var n=0;n<results.length;n++){
-                            if(results[n].search("bootstrapData") >= 0){
-                                target = JSON.parse(results[n].replace("<!--","").replace("-->",""));
-                            }
-                        }
+        // Make sure this page isn't already being processed or queued
+        for(var i=0;i<scraped.length;i++){
+            if(prefs.url == scraped[i]){
+                unique = false;
+            }
+        }
+        for(var i=0;i<scraping.length;i++){
+            if(prefs.url == scraping[i].url){
+                unique = false;
+            }
+        }
 
-                        // Identify the data we want to store from this page
-                        target = target.bootstrapData.listing;
-                        target.page_url = page;
+        if(unique){
+            queue.push(prefs);
+        }
+    }
 
-                        // Add newly parsed page
-                        completed_pages.push(target);
-                        // Remove this page from the queue
-                        pages_crawling.splice(pages_crawling.indexOf(page), 1);
+    // Process the next item in the queue
+    function processQueue(){
+        // Move forward if there is an item left in the queue, otherwise check to see if we are finished
+        if(queue.length > 0) {
+            console.log('Processing: ' + scraping.length + ' | Remaining: ' + queue.length + ' | Completed: ' + scraped.length);
+            // Add last item from pages_to_crawl queue
+            scraping.push(queue[queue.length - 1]);
+            queue.pop();
 
-                        var fields = ["additional_house_rules","bathroom_label","bedroom_label","bedrooms","bed_label","beds","description","guest_label","house_rules","id","listing_amenities","listing_amenities_business_travel_rank_order","listing_expectations","listing_rooms","market","name","other_property_types","p3_subject","p3_summary_address","p3_summary_title","person_capacity","photos","primary_host","property_type_id","room_and_property_type","room_type_category","sectioned_description","space_interface","star_rating","summary","tier_id","user","book_it_url","calendar_last_updated_at","cancellation_policy","cancellation_policy_category","guest_controls","has_new_cancellation_policy","localized_minimum_nights_description","min_nights","native_currency","price_interface","should_show_complex_datepicker_prompt","show_policy_details","is_business_travel_ready","additional_hosts","alternate_sectioned_description_for_p3","description_locale","has_vendor_description","initial_description_author_type","localized_city","localized_listing_expectations","localized_room_type","machine_translation_source_language","city","city_guidebook","country","country_code","host_guidebook","lat","lng","location_title","neighborhood_community_tags","neighborhood_id","state","p3_event_data_logging","paid_growth_remarketing_listing_ids","commercial_host_info","disaster_id","disaster_name","license","p3_listing_flag_options","requires_license","flag_info","guest_country","is_viewer_korean","number_of_guests_hosted_from_country","should_hide_action_buttons","should_show_business_details","show_edit_mode","eligible_to_promote_reviews","p3_display_review_summary","p3_review_flag_options","review_details_interface","sorted_reviews","visible_review_count","cover_photo_primary","cover_photo_secondary","cover_photo_vertical","host_interaction","layout","nearby_airport_distance_descriptions","select_listing_tenets","space_type","hide_from_search_engines","instant_bookable_for_embed","p3_neighborhood_breadcrumb_details","p3_seo_breadcrumb_details","p3_seo_property_search_url","price_formatted_for_embed","seo_features","share_links","wishlisted_count_cached"];
-
-                        var csv = json2csv({
-                            data: target,
-                            fields: fields
-                        });
-
-                        console.log('Finished crawling page: ' + page);
-                        fs.appendFile(STORAGE_FILE, csv, function(err){
-                            if(err){
-                                return console.log(err);
-                            } else {
-                                console.log('File was saved!');
-                            }});
-                    }
-                });
-        } else if (pages_to_crawl.length == 0 && pages_crawling.length == 0 && completed_pages.length > 0){
+            // Process the last item in the queue
+            loadListing(scraping[scraping.length - 1]);
+        } else if (queue.length == 0 && scraping.length == 0 && scraped.length > 0){
             console.log('**** FINISHED CRAWLING *****');
-            console.log(completed_pages);
             clearInterval(crawler);
         }
     }
 
-    init();
+    // Load the listing information using XHR
+    function loadListing(prefs){
+        var xhr = new XMLHttpRequest();
 
-    return this;
+        function onReadyStateChange(){
+            // If xhr is done and response was 200(ok) parse as JSON
+            if(xhr.readyState == 4 && xhr.status == 200){
+                try{
+                    // Execute the callback function, passing the loaded data as well as used preferences
+                    prefs.callback(JSON.parse(xhr.responseText), prefs);
+                } catch (e){
+                    console.error('Invalid Response from Server: ' + e);
+                }
+            }
+        }
+
+        xhr.onreadystatechange = onReadyStateChange;
+        xhr.open(prefs.method, prefs.url, true);
+        xhr.send();
+    }
+
+    // Write listing data to file
+    function addListing(listing, prefs){
+        // Add the listing url to the object before converting to CSV
+        listing.listing.page_url = prefs.url;
+        scraped.push(prefs.url);
+
+        // Fields to output to CSV
+        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'];
+
+        // Convert to CSV
+        var csv = json2csv({
+            data: listing.listing,
+            fields: fields
+        });
+
+        console.log('Finished crawling page: ' + prefs.url);
+        // Add this page to the STORAGE_FILE
+        fs.appendFile(STORAGE_FILE, csv, function(err){
+            if(err){
+                return console.log(err);
+            } else {
+                console.log('File was saved!');
+            }});
+    }
+
+    init();
 }

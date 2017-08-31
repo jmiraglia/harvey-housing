@@ -6,6 +6,7 @@ var SCRAPERS = [],
 SCRAPERS.push(scraper.addScraper({
     "type": "airbnb",
     "root_domain": "https://www.airbnb.com",
+    "api_url": "https://api.airbnb.com",
     "start_url": "https://www.airbnb.com/disaster/hurricaneharveyevacuees?test=test",
     "selector": ".listing-img a",
     "extract": "href"
