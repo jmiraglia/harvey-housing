@@ -13,9 +13,8 @@ function addScraper(options){
         queue = [],                 // Queue of pages
         scraping = [],              // Currently being scraped
         crawler = null,             // Interval loop to process the queue
-        PAGE_LOAD_INTERVAL = 500,  // How often to process next queue item
-        STORAGE_FILE = "airbnb.csv",// File name to store results in
-        to_csv = [];
+        PAGE_LOAD_INTERVAL = 300,   // How often to process next queue item
+        STORAGE_FILE = "airbnb.csv";// File name to store results in
 
 
     function init(){
@@ -133,9 +132,9 @@ function addScraper(options){
             loadListing(scraping[scraping.length - 1]);
 
             queue.pop();
-        } else if (scraped.length > 30){
-            console.log('**** FINISHED CRAWLING *****');
-            processResults();
+        } else if (scraped.length > 30 && scraping.length == 0 && queue.length == 0){
+            // console.log('**** FINISHED CRAWLING *****');
+            // processResults();
         }
     }
 
@@ -165,11 +164,12 @@ function addScraper(options){
         var show_header = false;
 
         listing.listing.pets_allowed = 'no';
+
         for(var n=0;n<listing.listing.amenities.length;n++){
-            if(listing.listing.amenities[n].indexOf('Pets Allowed') != -1){
+            if(listing.listing.amenities[n] == 'Pets allowed'){
                 listing.listing.pets_allowed = 'yes';
 
-                return;
+                break;
             }
         }
 
@@ -179,12 +179,11 @@ function addScraper(options){
         // Add the listing url to the object before converting to CSV
         listing.listing.page_url = prefs.url;
         scraped.push(prefs.url);
-        to_csv.push(listing.listing);
         scraping.splice(scraping.indexOf(prefs), 1);
 
         // Fields to output to CSV
-        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
-            field_names = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+        var fields = ['page_url','additional_house_rules','pets_allowed','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+            field_names = ['page_url','additional_house_rules','pets_allowed','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
             opts = {
                 data: listing.listing,
                 fields: fields,
@@ -193,15 +192,19 @@ function addScraper(options){
             };
 
         // Convert to CSV
-        var csv = json2csv(opts);
-
-        // Add this page to the STORAGE_FILE
-        fs.appendFile(STORAGE_FILE, csv + '\n', function(err){
+        var csv = json2csv(opts, function(err, csv){
             if(err){
-                return console.log(err);
+                console.error(err);
             } else {
-                console.log('File was saved!');
-            }});
+                // Add this page to the STORAGE_FILE
+                fs.appendFile(STORAGE_FILE, csv + '\n', function(err){
+                    if(err){
+                        return console.log(err);
+                    } else {
+                        console.log('File was saved!');
+                    }});
+            }
+        });
     }
 
     // Write results to file
