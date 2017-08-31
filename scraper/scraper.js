@@ -107,6 +107,11 @@ function addScraper(options){
                 unique = false;
             }
         }
+        for(var i=0;i<queue.length;i++){
+            if(queue[i].url == prefs.url){
+                unique = false;
+            }
+        }
 
         if(unique){
             queue.push(prefs);
@@ -120,10 +125,11 @@ function addScraper(options){
             console.log('Processing: ' + scraping.length + ' | Remaining: ' + queue.length + ' | Completed: ' + scraped.length);
             // Add last item from pages_to_crawl queue
             scraping.push(queue[queue.length - 1]);
-            queue.pop();
 
             // Process the last item in the queue
             loadListing(scraping[scraping.length - 1]);
+
+            queue.pop();
         } else if (queue.length == 0 && scraping.length == 0 && scraped.length > 0){
             console.log('**** FINISHED CRAWLING *****');
             clearInterval(crawler);
@@ -154,11 +160,11 @@ function addScraper(options){
     // Write listing data to file
     function addListing(listing, prefs){
         // Add the listing url to the object before converting to CSV
-        listing.listing.page_url = prefs.url;
+        // listing.listing.page_url = prefs.url;
         scraped.push(prefs.url);
 
         // Fields to output to CSV
-        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'];
+        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address'];
 
         // Convert to CSV
         var csv = json2csv({
