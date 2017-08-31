@@ -44,6 +44,7 @@ function addScraper(options){
 
                 // Load all paginated listings
                 for(var p=2;p<=parseInt(results[results.length-2]);p++){
+                // for(var p=2;p<=3;p++){
                     addStartingPoint(options.start_url + '&page=' + p);
                 }
 
@@ -124,7 +125,7 @@ function addScraper(options){
     function processQueue(){
         // Move forward if there is an item left in the queue, otherwise check to see if we are finished
         if(queue.length > 0) {
-            console.log('Processing: ' + scraping.length + ' | Remaining: ' + queue.length + ' | Completed: ' + scraped.length);
+            console.log('Processing: ' + scraping.length + ' | Queued: ' + queue.length + ' | Completed: ' + scraped.length);
             // Add last item from pages_to_crawl queue
             scraping.push(queue[queue.length - 1]);
 
@@ -132,9 +133,8 @@ function addScraper(options){
             loadListing(scraping[scraping.length - 1]);
 
             queue.pop();
-        } else if (queue.length == 1 && scraping.length == 1 && scraped.length > 30){
+        } else if (scraped.length > 30){
             console.log('**** FINISHED CRAWLING *****');
-            clearInterval(crawler);
             processResults();
         }
     }
@@ -162,35 +162,51 @@ function addScraper(options){
 
     // Put resulting data where it needs to go
     function addListing(listing, prefs){
+        var show_header = false;
+
+        listing.listing.pets_allowed = 'no';
+        for(var n=0;n<listing.listing.amenities.length;n++){
+            if(listing.listing.amenities[n].indexOf('Pets Allowed') != -1){
+                listing.listing.pets_allowed = 'yes';
+
+                return;
+            }
+        }
+
+        if(scraped.length == 0 ){
+            show_header = true;
+        }
         // Add the listing url to the object before converting to CSV
         listing.listing.page_url = prefs.url;
         scraped.push(prefs.url);
         to_csv.push(listing.listing);
         scraping.splice(scraping.indexOf(prefs), 1);
 
-    }
-
-    // Write results to file
-    function processResults(){
         // Fields to output to CSV
         var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
             field_names = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
             opts = {
-                data: to_csv,
+                data: listing.listing,
                 fields: fields,
-                fieldNames: field_names
+                fieldNames: field_names,
+                hasCSVColumnTitle: show_header
             };
 
         // Convert to CSV
         var csv = json2csv(opts);
 
         // Add this page to the STORAGE_FILE
-        fs.appendFile(STORAGE_FILE, csv, function(err){
+        fs.appendFile(STORAGE_FILE, csv + '\n', function(err){
             if(err){
                 return console.log(err);
             } else {
                 console.log('File was saved!');
             }});
+    }
+
+    // Write results to file
+    function processResults(){
+        clearInterval(crawler);
     }
 
     init();
