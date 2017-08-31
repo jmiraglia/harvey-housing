@@ -13,8 +13,10 @@ function addScraper(options){
         queue = [],                 // Queue of pages
         scraping = [],              // Currently being scraped
         crawler = null,             // Interval loop to process the queue
-        PAGE_LOAD_INTERVAL = 1000,  // How often to process next queue item
-        STORAGE_FILE = "airbnb.csv";// File name to store results in
+        PAGE_LOAD_INTERVAL = 500,  // How often to process next queue item
+        STORAGE_FILE = "airbnb.csv",// File name to store results in
+        to_csv = [];
+
 
     function init(){
         // Start out by writing to the destination file to start with an empty file
@@ -130,9 +132,10 @@ function addScraper(options){
             loadListing(scraping[scraping.length - 1]);
 
             queue.pop();
-        } else if (queue.length == 0 && scraping.length == 0 && scraped.length > 0){
+        } else if (queue.length == 1 && scraping.length == 1 && scraped.length > 30){
             console.log('**** FINISHED CRAWLING *****');
             clearInterval(crawler);
+            processResults();
         }
     }
 
@@ -157,22 +160,30 @@ function addScraper(options){
         xhr.send();
     }
 
-    // Write listing data to file
+    // Put resulting data where it needs to go
     function addListing(listing, prefs){
         // Add the listing url to the object before converting to CSV
-        // listing.listing.page_url = prefs.url;
+        listing.listing.page_url = prefs.url;
         scraped.push(prefs.url);
+        to_csv.push(listing.listing);
+        scraping.splice(scraping.indexOf(prefs), 1);
 
+    }
+
+    // Write results to file
+    function processResults(){
         // Fields to output to CSV
-        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address'];
+        var fields = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+            field_names = ['page_url','additional_house_rules','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+            opts = {
+                data: to_csv,
+                fields: fields,
+                fieldNames: field_names
+            };
 
         // Convert to CSV
-        var csv = json2csv({
-            data: listing.listing,
-            fields: fields
-        });
+        var csv = json2csv(opts);
 
-        console.log('Finished crawling page: ' + prefs.url);
         // Add this page to the STORAGE_FILE
         fs.appendFile(STORAGE_FILE, csv, function(err){
             if(err){
