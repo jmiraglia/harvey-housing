@@ -182,8 +182,8 @@ function addScraper(options){
         scraping.splice(scraping.indexOf(prefs), 1);
 
         // Fields to output to CSV
-        var fields = ['page_url','additional_house_rules','pets_allowed','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
-            field_names = ['page_url','additional_house_rules','pets_allowed','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','name','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+        var fields = ['name','page_url','additional_house_rules','pets_allowed','address','bathrooms','bedrooms','beds','bed_type','calendar_updated_at','city','description','house_rules','lat','lng','map_image_url','person_capacity','price','price_formatted','price_for_extra_person_native','property_type','public_address','notes'],
+            field_names = ['Name','Page Url','Addtl House Rules','Pets Allowed','Address','Bathrooms','Bedrooms','Beds','Bed Type','Last Calendar Update','City','Description','House Rules','LAT','LNG','Map URL','Person Capacity','Price','$ Price','Price per Extra Person','Property Type','Public Address','Notes'],
             opts = {
                 data: listing.listing,
                 fields: fields,
